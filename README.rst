@@ -92,9 +92,9 @@ The following configuration values are available:
 
 - ``spotify/password``: Your Spotify Premium password. You *must* provide this.
 
-- ``spotify_web/client_id``: Your Spotify application client id. You *must* provide this.
+- ``spotify/client_id``: Your Spotify application client id. You *must* provide this.
 
-- ``spotify_web/client_secret``: Your Spotify application secret key. You *must* provide this.
+- ``spotify/client_secret``: Your Spotify application secret key. You *must* provide this.
 
 - ``spotify/bitrate``: Audio bitrate in kbps. ``96``, ``160``, or ``320``.
   Defaults to ``160``.
