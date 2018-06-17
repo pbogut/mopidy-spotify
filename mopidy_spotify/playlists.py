@@ -4,8 +4,6 @@ import logging
 
 from mopidy import backend
 
-import spotify
-
 from mopidy_spotify import translator, utils
 
 
@@ -20,78 +18,49 @@ class SpotifyPlaylistsProvider(backend.PlaylistsProvider):
 
     def as_list(self):
         with utils.time_logger('playlists.as_list()'):
-            return list(self._get_flattened_playlist_refs())
+            username = self._backend._session.user_name
+            web_playlists = self._backend._web_client.get(
+                'users/' + username + '/playlists', params={})
 
-    def _get_flattened_playlist_refs(self):
-        if self._backend._session is None:
-            return
-
-        if self._backend._session.playlist_container is None:
-            return
-
-        username = self._backend._session.user_name
-        folders = []
-
-        for sp_playlist in self._backend._session.playlist_container:
-            if isinstance(sp_playlist, spotify.PlaylistFolder):
-                if sp_playlist.type is spotify.PlaylistType.START_FOLDER:
-                    folders.append(sp_playlist.name)
-                elif sp_playlist.type is spotify.PlaylistType.END_FOLDER:
-                    folders.pop()
-                continue
-
-            playlist_ref = translator.to_playlist_ref(
-                sp_playlist, folders=folders, username=username)
-            if playlist_ref is not None:
-                yield playlist_ref
+            return [
+                translator.web_to_playlist_ref(web_playlist, username=username)
+                for web_playlist in web_playlists['items']]
 
     def get_items(self, uri):
         with utils.time_logger('playlist.get_items(%s)' % uri):
-            return self._get_playlist(uri, as_items=True)
+            web_tracks = self._backend._web_client.get(
+                'users/' + self._user_from_uri(uri) + '/playlists/'
+                + self._playlist_from_uri(uri) + '/tracks', params={})
+
+            return [translator.web_to_track(web_track)
+                    for web_track in web_tracks['items']]
 
     def lookup(self, uri):
         with utils.time_logger('playlists.lookup(%s)' % uri):
-            return self._get_playlist(uri)
+            username = self._backend._session.user_name
+            web_playlist = self._backend._web_client.get(
+                'users/' + self._user_from_uri(uri) + '/playlists/'
+                + self._playlist_from_uri(uri), params={})
 
-    def _get_playlist(self, uri, as_items=False):
-        try:
-            sp_playlist = self._backend._session.get_playlist(uri)
-        except spotify.Error as exc:
-            logger.debug('Failed to lookup Spotify URI %s: %s', uri, exc)
-            return
-
-        if not sp_playlist.is_loaded:
-            logger.debug(
-                'Waiting for Spotify playlist to load: %s', sp_playlist)
-            sp_playlist.load(self._timeout)
-
-        username = self._backend._session.user_name
-        return translator.to_playlist(
-            sp_playlist, username=username, bitrate=self._backend._bitrate,
-            as_items=as_items)
+            return translator.web_to_playlist(web_playlist, username=username)
 
     def refresh(self):
         pass  # Not needed as long as we don't cache anything.
 
     def create(self, name):
-        try:
-            sp_playlist = (
-                self._backend._session.playlist_container
-                .add_new_playlist(name))
-        except ValueError as exc:
-            logger.warning(
-                'Failed creating new Spotify playlist "%s": %s', name, exc)
-        except spotify.Error:
-            logger.warning('Failed creating new Spotify playlist "%s"', name)
-        else:
-            username = self._backend._session.user_name
-            return translator.to_playlist(sp_playlist, username=username)
+        pass  # TODO
 
     def delete(self, uri):
         pass  # TODO
 
     def save(self, playlist):
         pass  # TODO
+
+    def _user_from_uri(self, uri):
+        return uri.split(':')[2]
+
+    def _playlist_from_uri(self, uri):
+        return uri.split(':')[4]
 
 
 def on_container_loaded(sp_playlist_container):
